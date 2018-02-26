@@ -7,46 +7,39 @@
 package clipboard
 
 import (
-	"os/exec"
+	"unsafe"
 )
 
-var (
-	pasteCmdArgs = "pbpaste"
-	copyCmdArgs  = "pbcopy"
-)
+/*
+#cgo CFLAGS: -x objective-c
+#cgo LDFLAGS: -framework AppKit
 
-func getPasteCommand() *exec.Cmd {
-	return exec.Command(pasteCmdArgs)
+#import <Foundation/Foundation.h>
+#import <Cocoa/Cocoa.h>
+
+void Copy(char *p) {
+	NSString *s = [NSString stringWithUTF8String:p];
+	[[NSPasteboard generalPasteboard] clearContents];
+	[[NSPasteboard generalPasteboard] setString:s forType:NSStringPboardType];
 }
 
-func getCopyCommand() *exec.Cmd {
-	return exec.Command(copyCmdArgs)
+char *Paste() {
+	NSString *s = [[NSPasteboard generalPasteboard] stringForType:NSStringPboardType];
+	[s autorelease];
+	return strdup([s UTF8String]);
+}
+*/
+import "C"
+
+func writeAll(p string) error {
+	s := C.CString(p)
+	defer C.free(unsafe.Pointer(s))
+	C.Copy(s)
+	return nil
 }
 
 func readAll() (string, error) {
-	pasteCmd := getPasteCommand()
-	out, err := pasteCmd.Output()
-	if err != nil {
-		return "", err
-	}
-	return string(out), nil
-}
-
-func writeAll(text string) error {
-	copyCmd := getCopyCommand()
-	in, err := copyCmd.StdinPipe()
-	if err != nil {
-		return err
-	}
-
-	if err := copyCmd.Start(); err != nil {
-		return err
-	}
-	if _, err := in.Write([]byte(text)); err != nil {
-		return err
-	}
-	if err := in.Close(); err != nil {
-		return err
-	}
-	return copyCmd.Wait()
+	s := C.Paste()
+	defer C.free(unsafe.Pointer(s))
+	return C.GoString(s), nil
 }
